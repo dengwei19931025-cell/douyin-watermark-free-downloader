@@ -361,7 +361,8 @@ def _exists_nonempty(p: Path) -> bool:
 
 
 def download(url: str, dest: Path, session: requests.Session, headers: dict,
-             label: str = "", log: Callable[[str], None] = print, quiet: bool = False):
+             label: str = "", log: Callable[[str], None] = print, quiet: bool = False,
+             lang: str = "zh"):
     """下载到 dest（先写 dest.part 断点续传，成功后原子改名），带进度与重试。
 
     quiet=False：控制台用 \r 原位刷新进度；quiet=True：每次进度通过 log 回调输出（供 GUI 用）。
@@ -410,7 +411,7 @@ def download(url: str, dest: Path, session: requests.Session, headers: dict,
                     sys.stdout.write("\r" + " " * 70 + "\r")
                 return True
         except (requests.RequestException, ValueError, OSError) as e:
-            log(f"  [!] {t('zh', 'download_fail', n=attempt + 1, e=e)}")
+            log(f"  [!] {t(lang, 'download_fail', n=attempt + 1, e=e)}")
             time.sleep(2 * (attempt + 1))
     return False
 
@@ -477,21 +478,25 @@ def download_one(link_or_text: str, out_dir: Path, session: requests.Session,
         dest = out_dir / f"{fname}_{aweme_id[:8]}.mp4"
         if _exists_nonempty(dest) and not redownload:
             log(f"  [·] {t(lang, 'exists')}: {dest.name}")
-        elif download(video_url, dest, session, {"User-Agent": UA_MOBILE}, label=video_label, log=log, quiet=quiet):
+        elif download(video_url, dest, session, {"User-Agent": UA_MOBILE}, label=video_label, log=log, quiet=quiet, lang=lang):
             log(f"  [✓] {t(lang, 'video_saved', path=dest)}")
         info["file"] = str(dest)
         if cover and info["cover_url"]:
-            cdest = dest.with_suffix(".jpg")
+            # 封面真实格式未必是 jpeg（抖音常返回 webp），按 URL 后缀取扩展名，避免名实不符
+            cext = Path(info["cover_url"].split("?")[0]).suffix or ".jpg"
+            if len(cext) > 5:
+                cext = ".jpg"
+            cdest = dest.with_name(dest.stem + cext)
             if _exists_nonempty(cdest) and not redownload:
                 log(f"  [·] {t(lang, 'exists')}: {cdest.name}")
-            elif download(info["cover_url"], cdest, session, {"User-Agent": UA_MOBILE}, label="cover", log=log, quiet=quiet):
+            elif download(info["cover_url"], cdest, session, {"User-Agent": UA_MOBILE}, label="cover", log=log, quiet=quiet, lang=lang):
                 log(f"  [✓] {t(lang, 'cover_saved', path=cdest)}")
             info["cover"] = str(cdest)
         if music and info["music_url"]:
             mdest = dest.with_suffix(".mp3")
             if _exists_nonempty(mdest) and not redownload:
                 log(f"  [·] {t(lang, 'exists')}: {mdest.name}")
-            elif download(info["music_url"], mdest, session, {"User-Agent": UA_MOBILE}, label="music", log=log, quiet=quiet):
+            elif download(info["music_url"], mdest, session, {"User-Agent": UA_MOBILE}, label="music", log=log, quiet=quiet, lang=lang):
                 log(f"  [✓] {t(lang, 'music_saved', path=mdest)}")
             info["music"] = str(mdest)
     elif info["type"] == "images" and info["images"]:
@@ -507,7 +512,7 @@ def download_one(link_or_text: str, out_dir: Path, session: requests.Session,
             dest = sub / f"{i:02d}{ext}"
             if _exists_nonempty(dest) and not redownload:
                 ok += 1
-            elif download(img_url, dest, session, {"User-Agent": UA_MOBILE}, label=f"img{i}", log=log, quiet=quiet):
+            elif download(img_url, dest, session, {"User-Agent": UA_MOBILE}, label=f"img{i}", log=log, quiet=quiet, lang=lang):
                 ok += 1
         log(f"  [✓] {t(lang, 'album_saved', ok=ok, total=len(info['images']), dir=sub)}")
         info["dir"] = str(sub)
